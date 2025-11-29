@@ -11,7 +11,11 @@ import numpy as np
 import speech_recognition as sr
 import pyttsx3
 import threading
-import mediapipe as mp
+try:
+    import mediapipe as mp
+    MEDIAPIPE_AVAILABLE = True
+except ImportError:
+    MEDIAPIPE_AVAILABLE = False
 from textblob import TextBlob
 import time
 import random
@@ -205,32 +209,35 @@ class CameraThread(QThread):
         self.running = True
         cap = cv2.VideoCapture(0)
         
-        mp_face_mesh = mp.solutions.face_mesh
-        face_mesh = mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+        if MEDIAPIPE_AVAILABLE:
+            mp_face_mesh = mp.solutions.face_mesh
+            face_mesh = mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence=0.5)
         
         while self.running:
             ret, frame = cap.read()
             if ret:
                 frame = cv2.resize(frame, (640, 480))
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = face_mesh.process(rgb_frame)
                 
                 looking_away = False
-                
                 h, w, _ = frame.shape
-                if results.multi_face_landmarks:
-                    for face_landmarks in results.multi_face_landmarks:
-                        # Simple Head Pose Estimation (Nose tip vs ears/eyes)
-                        # This is a simplified heuristic. Real pose estimation requires PnP.
-                        nose_tip = face_landmarks.landmark[1]
-                        nose_x = nose_tip.x * w
-                        
-                        # Check if nose is too far left or right (looking away)
-                        if nose_x < w * 0.3 or nose_x > w * 0.7:
-                            looking_away = True
+
+                if MEDIAPIPE_AVAILABLE:
+                    results = face_mesh.process(rgb_frame)
+                    
+                    if results.multi_face_landmarks:
+                        for face_landmarks in results.multi_face_landmarks:
+                            # Simple Head Pose Estimation (Nose tip vs ears/eyes)
+                            # This is a simplified heuristic. Real pose estimation requires PnP.
+                            nose_tip = face_landmarks.landmark[1]
+                            nose_x = nose_tip.x * w
                             
-                        # Draw mesh (optional, maybe just landmarks)
-                        # mp.solutions.drawing_utils.draw_landmarks(frame, face_landmarks, mp_face_mesh.FACEMESH_TESSELATION)
+                            # Check if nose is too far left or right (looking away)
+                            if nose_x < w * 0.3 or nose_x > w * 0.7:
+                                looking_away = True
+                                
+                            # Draw mesh (optional, maybe just landmarks)
+                            # mp.solutions.drawing_utils.draw_landmarks(frame, face_landmarks, mp_face_mesh.FACEMESH_TESSELATION)
 
                 if looking_away:
                     self.warning_signal.emit("Please maintain eye contact.")

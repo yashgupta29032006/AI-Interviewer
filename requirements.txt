@@ -4,7 +4,7 @@ mss
 numpy
 SpeechRecognition
 pyttsx3
-mediapipe
+
 textblob
 pyaudio
 google-generativeai
