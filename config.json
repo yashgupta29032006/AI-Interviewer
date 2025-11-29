@@ -1,0 +1,17 @@
+{
+    "app_name": "AI Mock Interviewer",
+    "version": "1.0.0",
+    "default_difficulty": "medium",
+    "domains": [
+        "Python",
+        "DSA",
+        "OOP",
+        "DBMS",
+        "OS",
+        "HR"
+    ],
+    "difficulty_levels": ["easy", "medium", "hard"],
+    "passing_score": 70,
+    "questions_per_interview": 5,
+    "theme": "dark"
+}

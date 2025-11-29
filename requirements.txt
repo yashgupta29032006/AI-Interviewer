@@ -1,0 +1,13 @@
+PyQt6==6.7.1
+opencv-python-headless
+mss
+numpy
+SpeechRecognition
+pyttsx3
+mediapipe
+textblob
+pyaudio
+google-generativeai
+openai
+python-dotenv
+pdfminer.six
