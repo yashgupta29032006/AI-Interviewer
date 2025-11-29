@@ -273,6 +273,96 @@ class ScreenCaptureThread(QThread):
         self.running = False
         self.wait()
 
+class CodingPanel(QWidget):
+    run_clicked = pyqtSignal()
+    submit_clicked = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background-color: #1e1e1e; border-left: 1px solid #333;")
+        
+        layout = QVBoxLayout(self)
+        
+        # Header
+        header = QLabel("Code Editor")
+        header.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        header.setStyleSheet("color: #e0e0e0; margin-bottom: 10px;")
+        layout.addWidget(header)
+        
+        # Code Editor
+        self.code_edit = QTextEdit()
+        self.code_edit.setFont(QFont("Courier New", 13))
+        self.code_edit.setStyleSheet("""
+            QTextEdit {
+                background-color: #2b2b2b;
+                color: #dcdcdc;
+                border: 1px solid #444;
+                border-radius: 5px;
+                padding: 10px;
+            }
+        """)
+        self.code_edit.setPlaceholderText("Write your Python code here...")
+        layout.addWidget(self.code_edit, stretch=2)
+        
+        # Console Output
+        self.console_label = QLabel("Console Output:")
+        self.console_label.setStyleSheet("color: #aaa; margin-top: 10px;")
+        layout.addWidget(self.console_label)
+        
+        self.console_output = QTextEdit()
+        self.console_output.setReadOnly(True)
+        self.console_output.setFont(QFont("Courier New", 12))
+        self.console_output.setStyleSheet("""
+            QTextEdit {
+                background-color: #000000;
+                color: #00ff00;
+                border: 1px solid #444;
+                border-radius: 5px;
+                padding: 10px;
+            }
+        """)
+        self.console_output.setFixedHeight(150)
+        layout.addWidget(self.console_output)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        
+        self.run_btn = QPushButton("Run Code")
+        self.run_btn.setStyleSheet("background-color: #2e7d32; color: white; padding: 8px 15px; border-radius: 15px;")
+        self.run_btn.clicked.connect(self.run_clicked.emit)
+        
+        self.submit_btn = QPushButton("Submit Solution")
+        self.submit_btn.setStyleSheet("background-color: #0078d7; color: white; padding: 8px 15px; border-radius: 15px;")
+        self.submit_btn.clicked.connect(self.submit_clicked.emit)
+        
+        btn_layout.addWidget(self.run_btn)
+        btn_layout.addWidget(self.submit_btn)
+        
+        layout.addLayout(btn_layout)
+        
+    def get_code(self):
+        return self.code_edit.toPlainText()
+        
+    def set_code(self, text):
+        self.code_edit.setText(text)
+        
+    def set_output(self, text, is_error=False):
+        color = "#ff4444" if is_error else "#00ff00"
+        self.console_output.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: #000000;
+                color: {color};
+                border: 1px solid #444;
+                border-radius: 5px;
+                padding: 10px;
+            }}
+        """)
+        self.console_output.setText(text)
+        
+    def clear(self):
+        self.code_edit.clear()
+        self.console_output.clear()
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -557,8 +647,16 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self.console_output)
         sidebar_layout.addLayout(btn_layout)
         
-        main_layout.addWidget(video_area)
-        main_layout.addWidget(sidebar)
+        main_layout.addWidget(video_area, stretch=2)
+        
+        # Coding Panel (Hidden by default)
+        self.coding_panel = CodingPanel()
+        self.coding_panel.hide()
+        self.coding_panel.run_clicked.connect(self.run_code)
+        self.coding_panel.submit_clicked.connect(self.submit_answer)
+        main_layout.addWidget(self.coding_panel, stretch=3)
+        
+        main_layout.addWidget(sidebar, stretch=1)
         
         self.interview_widget.setLayout(main_layout)
         self.central_widget.addWidget(self.interview_widget)
@@ -711,29 +809,47 @@ class MainWindow(QMainWindow):
         self.submit_btn.setEnabled(True)
         self.answer_input.setReadOnly(False)
         
-        # Show Run button only for coding questions
-        if question.get('type') == 'coding':
-            self.run_btn.show()
-            self.console_output.show()
-            self.answer_input.setPlaceholderText("Type your Python code here...")
-            # Pre-fill function signature if available
-            if 'function_name' in question:
-                self.answer_input.setText(f"def {question['function_name']}(...):\n    pass")
-        else:
-            self.run_btn.hide()
-            self.answer_input.setPlaceholderText("Speak your answer or type here...")
+
         
         self.progress_label.setText(f"Question {self.engine.questions_asked}/{self.engine.max_questions}")
         self.difficulty_label.setText(f"Difficulty: {self.engine.difficulty.capitalize()}")
 
+        # Handle Coding Panel Visibility
+        if question.get('type') == 'coding':
+            self.coding_panel.show()
+            self.coding_panel.clear()
+            # Pre-fill function signature
+            if 'function_name' in question:
+                self.coding_panel.set_code(f"def {question['function_name']}(...):\n    pass")
+            
+            # Hide standard inputs in sidebar to avoid confusion
+            self.answer_input.hide()
+            self.submit_btn.hide()
+            self.run_btn.hide() # Hide the old run button
+        else:
+            self.coding_panel.hide()
+            self.answer_input.show()
+            self.answer_input.setPlaceholderText("Speak your answer or type here...")
+            self.submit_btn.show()
+            # self.run_btn.hide() # Already handled by logic above but good to be safe
+
     def run_code(self):
-        code = self.answer_input.toPlainText()
+        # Determine source of code
+        if self.coding_panel.isVisible():
+            code = self.coding_panel.get_code()
+        else:
+            code = self.answer_input.toPlainText()
+            
         question = self.engine.current_question
         
         if not code.strip():
             return
             
-        self.console_output.setText("Running...")
+        if self.coding_panel.isVisible():
+            self.coding_panel.set_output("Running...")
+        else:
+            self.console_output.setText("Running...")
+            
         QApplication.processEvents()
         
         function_name = question.get('function_name', 'solution')
@@ -741,15 +857,25 @@ class MainWindow(QMainWindow):
         
         result = self.executor.run_code(code, function_name, test_cases)
         
-        if result['success']:
-            self.console_output.setText(f"Execution Successful:\n{result['output']}")
-            self.console_output.setStyleSheet("background-color: #000; color: #0f0; font-family: 'Courier New'; font-size: 12px;")
+        if self.coding_panel.isVisible():
+            if result['success']:
+                self.coding_panel.set_output(f"Execution Successful:\n{result['output']}", is_error=False)
+            else:
+                self.coding_panel.set_output(f"Execution Failed:\n{result['errors']}\nOutput:\n{result['output']}", is_error=True)
         else:
-            self.console_output.setText(f"Execution Failed:\n{result['errors']}\nOutput:\n{result['output']}")
-            self.console_output.setStyleSheet("background-color: #000; color: #f00; font-family: 'Courier New'; font-size: 12px;")
+            if result['success']:
+                self.console_output.setText(f"Execution Successful:\n{result['output']}")
+                self.console_output.setStyleSheet("background-color: #000; color: #0f0; font-family: 'Courier New'; font-size: 12px;")
+            else:
+                self.console_output.setText(f"Execution Failed:\n{result['errors']}\nOutput:\n{result['output']}")
+                self.console_output.setStyleSheet("background-color: #000; color: #f00; font-family: 'Courier New'; font-size: 12px;")
 
     def submit_answer(self):
-        answer = self.answer_input.toPlainText()
+        if self.coding_panel.isVisible():
+            answer = self.coding_panel.get_code()
+        else:
+            answer = self.answer_input.toPlainText()
+            
         if not answer.strip():
             QMessageBox.warning(self, "Warning", "Please enter an answer.")
             return
